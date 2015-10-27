@@ -388,8 +388,26 @@ public class Player implements cc2.sim.Player {
         {0, 1, 1, 1, 2, 0, 2, 1, 3, 1, 3, 2, 4, 1, 5, 1},
     };
 
+    // and only 12 pentominoes
+    private static final int all_pentominoes[][] = {
+        {0, 0, 0, 1, 0, 2, 0, 3, 0, 4},
+        {0, 0, 0, 1, 0, 2, 0, 3, 1, 0},
+        {0, 0, 0, 1, 0, 2, 0, 3, 1, 1},
+        {0, 0, 0, 1, 0, 2, 1, 0, 1, 1},
+        {0, 0, 0, 1, 0, 2, 1, 0, 1, 2},
+        {0, 0, 0, 1, 0, 2, 1, 0, 2, 0},
+        {0, 0, 0, 1, 0, 2, 1, 1, 2, 1},
+        {0, 0, 0, 1, 0, 2, 1, 2, 1, 3},
+        {0, 0, 0, 1, 1, 1, 1, 2, 2, 1},
+        {0, 0, 0, 1, 1, 1, 1, 2, 2, 2},
+        {0, 0, 0, 1, 1, 1, 2, 1, 2, 2},
+        {0, 1, 1, 0, 1, 1, 1, 2, 2, 1},
+    };
+
+
     private int cutter_attempts[] = new int[3];
     private Set<Integer> attempted_octominoes = new HashSet<>();
+    private Set<Integer> attempted_pentominoes = new HashSet<>();
 
     private Random rng = new Random(0);
 
@@ -511,38 +529,72 @@ public class Player implements cc2.sim.Player {
         return getOctomino(oct_id);
     }
 
-    private Shape pentomino(Shape cutters[], Shape oppo_cutters[]) {
-        // try to make a little fist thing
-        // *
-        // **
-        // **
+    private Shape getPentomino(int idx) {
+        int coord_list[] = all_pentominoes[idx];
 
-        Point arr[] = new Point[5];
-        arr[0] = new Point(1, 1);
-        arr[1] = new Point(1, 2);
-        arr[2] = new Point(2, 1);
-        arr[3] = new Point(2, 2);
-        switch (cutter_attempts[PENTOMINO]) {
-            case 0:
-                arr[4] = new Point(1, 0);
-                break;
-            case 1:
-                arr[4] = new Point(2, 0);
-                break;
-            case 2:
-                arr[4] = new Point(0, 1);
-                break;
-            case 3:
-                arr[4] = new Point(0, 2);
-                break;
-            case 4:
-                arr[4] = new Point(3, 1);
-                break;
-            default:
-                System.err.println("Should have only had five tries");
+        Point p[] = new Point[5];
+
+        for (int i = 0; i < 5; ++i) {
+            p[i] = new Point(coord_list[2 * i], coord_list[2 * i + 1]);
         }
 
-        return new Shape(arr);
+        return new Shape(p);
+    }
+
+    private Shape pentomino(Shape cutters[], Shape oppo_cutters[]) {
+        // try to fit their undecomino
+        System.out.println("Selecting pentomino");
+        Shape undec = oppo_cutters[0];
+        assert(undec != null);
+
+        boolean space[][] = new boolean[22][22];
+        for (int i = 0; i < 22; ++i) {
+            for (int j = 0; j < 22; ++j) {
+                space[i][j] = false;
+            }
+        }
+
+        Point dim[] = Util.dimensions(undec);
+        int w = dim[0].i;
+        int h = dim[0].j;
+
+        int woffset = (22 - w) / 2;
+        int hoffset = (22 - h) / 2;
+
+        // place undecomino
+        for (Point p : undec) {
+            space[p.i + woffset][p.j + hoffset] = true;
+        }
+
+        int pent_id = Util.findArgMin(0, all_pentominoes.length, (idx) -> {
+            // minimize total manhattan distance between shapes
+            // no, this doesn't make that much sense.
+            // I got lazy OK.
+
+            // making a copy of the grid
+            // boolean grid[][] = Arrays.stream(space).map(boolean[]::clone).toArray(boolean[][]::new);
+
+            if (attempted_pentominoes.contains(idx)) {
+                return Integer.MAX_VALUE;
+            }
+
+            Shape pent[] = getPentomino(idx).rotations();
+
+            return Util.findMin(0, pent.length, (o) -> {
+                int c = 0;
+                for (Point p : pent[o]) {
+                    for (Point p2 : undec) {
+                        c += Math.abs(p.i - p2.i);
+                        c += Math.abs(p.j - p2.j);
+                    }
+                }
+                return c;
+            });
+        });
+
+        attempted_pentominoes.add(pent_id);
+
+        return getPentomino(pent_id);
     }
 
     @Override
