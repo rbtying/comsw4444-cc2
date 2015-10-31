@@ -24,6 +24,8 @@ public class Player implements cc2.sim.Player {
 
     private Random rng = new Random(0);
 
+    private MagicDough md = new MagicDough(50);
+
     private Shape undecomino(Shape cutters[], Shape oppo_cutters[]) {
         // try to make an L
         // make most of the L using the first 9 points
@@ -138,6 +140,9 @@ public class Player implements cc2.sim.Player {
     @Override
     public Move cut(Dough dough, Shape[] your_cutters, Shape[] oppo_cutters) {
         ++tick;
+
+        md.diffFromDough(dough);
+
         if (dough.uncut()) {
             // can only use min
             int si = Util.findArgMin(0, your_cutters.length, (i) -> your_cutters[i].size());
@@ -148,21 +153,51 @@ public class Player implements cc2.sim.Player {
                 }
             }
         } else {
-            Integer si_idx[] = new Integer[your_cutters.length];
-            for (int i = 0; i < si_idx.length; ++i) {
-                si_idx[i] = i;
-            }
-            // sorted descending
-            Arrays.sort(si_idx, (a, b) -> Double.compare(your_cutters[b].size(), your_cutters[a].size()));
 
-            for (int si : si_idx) {
-                List<Move> moves = Util.getValidMoves(dough, your_cutters[si], si);
+            List<Move> all_valid_moves = Util.getValidMoves(dough, your_cutters);
+            Map<MagicDough.Window, Long> pre_move_scores = md.scoreAllWindows(oppo_cutters);
+            long scores[] = new long[all_valid_moves.size()];
 
-                // just return the first one
-                if (!moves.isEmpty()) {
-                    return moves.get(0);
+            System.out.println("Evaluating " + all_valid_moves.size() + " valid moves...");
+
+            for (int i = 0; i < all_valid_moves.size(); ++i) {
+                Move m = all_valid_moves.get(i);
+                MagicDough.Window w = md.effectWindow(m.point.i, m.point.j);
+
+                if (pre_move_scores.get(w) == 0) {
+                    scores[i] = 0;
+                    continue;
+                }
+
+                if (md.makeMove(m, your_cutters, false)) {
+                    long score = md.countSpaces(w, oppo_cutters);
+                    md.undoLastMove(your_cutters);
+                    scores[i] = score - pre_move_scores.get(w);
+                } else {
+                    scores[i] = 0;
                 }
             }
+            // most negative is best
+
+            long minscore = Long.MAX_VALUE;
+            long maxscore = Long.MIN_VALUE;
+            Move m = null;
+            for (int i = 0; i < all_valid_moves.size(); ++i) {
+                if (scores[i] < minscore) {
+                    minscore = scores[i];
+                    m = all_valid_moves.get(i);
+                }
+
+                if (scores[i] > maxscore) {
+                    maxscore = scores[i];
+                }
+            }
+
+            System.out.println("Picking move with score " + minscore);
+            System.out.println("max score " + maxscore);
+
+
+            return m;
         }
         return null;
     }

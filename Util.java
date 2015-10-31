@@ -84,6 +84,29 @@ public class Util {
         return moves;
     }
 
+    public static List<Move> getValidMoves(Dough d, Shape C[]) {
+        // find all valid cuts
+
+        List<Move> moves = new ArrayList<>();
+
+        for (int si = 0; si < C.length; ++si) {
+            Shape[] rotations = C[si].rotations();
+            for (int i = 0; i < d.side(); ++i) {
+                for (int ri = 0; ri < rotations.length; ++ri) {
+                    Shape s = rotations[ri];
+                    for (int j = 0; j < d.side(); ++j) {
+                        Point p = new Point(i, j);
+                        if (d.cuts(s, p)) {
+                            moves.add(new Move(si, ri, p));
+                        }
+                    }
+                }
+            }
+
+        }
+
+        return moves;
+    }
     public static int evaluateTilingShape(Shape opp, Shape s, int sidelen) {
         Dough d = new Dough(sidelen);
         boolean play_opp = true;
