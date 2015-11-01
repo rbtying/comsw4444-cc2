@@ -194,8 +194,8 @@ public class Player implements cc2.sim.Player {
             }
 
             System.out.println("Picking move with score " + minscore);
-            System.out.println("max score " + maxscore);
 
+            md.makeMove(m, your_cutters, false);
 
             return m;
         }
