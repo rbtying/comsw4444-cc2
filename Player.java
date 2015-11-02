@@ -154,7 +154,19 @@ public class Player implements cc2.sim.Player {
             }
         } else {
 
-            List<Move> all_valid_moves = Util.getValidMoves(dough, your_cutters);
+            List<Move> undec_moves = Util.getValidMoves(dough, new Shape[]{your_cutters[0]}, new int[]{0});
+            List<Move> oct_moves = Util.getValidMoves(dough, new Shape[]{your_cutters[1]}, new int[]{1});
+            List<Move> pent_moves = Util.getValidMoves(dough, new Shape[]{your_cutters[2]}, new int[]{2});
+
+            //List<Move> all_valid_moves = Util.getValidMoves(dough, your_cutters);
+
+            List<Move> all_valid_moves = new ArrayList<>();
+            all_valid_moves.addAll(undec_moves);
+            all_valid_moves.addAll(oct_moves);
+            if (undec_moves.isEmpty()) {
+                all_valid_moves.addAll(pent_moves);
+            }
+
             Map<MagicDough.Window, Long> pre_move_scores = md.scoreAllWindows(oppo_cutters);
             long scores[] = new long[all_valid_moves.size()];
 

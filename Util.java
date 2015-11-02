@@ -84,7 +84,7 @@ public class Util {
         return moves;
     }
 
-    public static List<Move> getValidMoves(Dough d, Shape C[]) {
+    public static List<Move> getValidMoves(Dough d, Shape C[], int si_arr[]) {
         // find all valid cuts
 
         List<Move> moves = new ArrayList<>();
@@ -97,12 +97,11 @@ public class Util {
                     for (int j = 0; j < d.side(); ++j) {
                         Point p = new Point(i, j);
                         if (d.cuts(s, p)) {
-                            moves.add(new Move(si, ri, p));
+                            moves.add(new Move(si_arr[si], ri, p));
                         }
                     }
                 }
             }
-
         }
 
         return moves;
