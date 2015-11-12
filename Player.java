@@ -28,15 +28,6 @@ public class Player implements cc2.sim.Player {
     private MagicDough md = new MagicDough(50, 21);
 
     private Shape undecomino(Shape cutters[], Shape oppo_cutters[]) {
-        // try to make an L
-        // make most of the L using the first 9 points
-        // *****
-        // *
-        // *
-        // *
-        // *
-        // *
-
         Point p[] = new Point[11];
 
         // First attempt is to get a line
@@ -64,30 +55,20 @@ public class Player implements cc2.sim.Player {
         }
 
         switch (cutter_attempts[UNDECOMINO]) {
-            case 1:
+            case 2:
                 // symmetric L
                 p[9] = new Point(0, 5);
                 p[10] = new Point(5, 0);
                 break;
-            case 0:
+            case 3:
                 // long i
                 p[9] = new Point(0, 5);
                 p[10] = new Point(0, 6);
                 break;
-            case 2:
+            case 4:
                 // long j
                 p[9] = new Point(5, 0);
                 p[10] = new Point(6, 0);
-                break;
-            case 3:
-                // center point and j
-                p[9] = new Point(1, 1);
-                p[10] = new Point(5, 0);
-                break;
-            case 4:
-                // center point and i
-                p[9] = new Point(1, 1);
-                p[10] = new Point(0, 5);
                 break;
             default:
                 System.err.println("Should have only had five tries");
