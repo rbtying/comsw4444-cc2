@@ -168,10 +168,12 @@ public class Player implements cc2.sim.Player {
         } else {
 
             Map<Point, Set<Move>> enemy_move_lookup = new HashMap<>();
+            Map<Point, Set<Move>> move_lookup = new HashMap<>();
 
             for (int i = 0; i < dough.side(); ++i) {
                 for (int j = 0; j < dough.side(); ++j) {
                     enemy_move_lookup.put(new Point(i, j), new HashSet<>());
+                    move_lookup.put(new Point(i, j), new HashSet<>());
                 }
             }
 
@@ -185,52 +187,60 @@ public class Player implements cc2.sim.Player {
                 }
             }
 
-            List<Move> undec_moves = Util.getValidMoves(dough, new Shape[]{your_cutters[0]}, new int[]{0});
-            List<Move> oct_moves = Util.getValidMoves(dough, new Shape[]{your_cutters[1]}, new int[]{1});
-            List<Move> pent_moves = Util.getValidMoves(dough, new Shape[]{your_cutters[2]}, new int[]{2});
+            List<Move> moves = Util.getValidMoves(dough, your_cutters, new int[]{0, 1, 2});
 
-            List<Move> all_valid_moves = new ArrayList<>();
-            all_valid_moves.addAll(undec_moves);
-            all_valid_moves.addAll(oct_moves);
-            if (undec_moves.size() < max_undec_moves / 4) {
-                all_valid_moves.addAll(pent_moves);
+            for (Move m : moves) {
+                Shape s = your_cutters[m.shape].rotations()[m.rotation];
+                for (Point p : s) {
+                    Point pp = new Point(p.i + m.point.i, p.j + m.point.j);
+                    move_lookup.get(pp).add(m);
+                }
             }
 
-            double scores[] = new double[all_valid_moves.size()];
-            System.out.println("Evaluating " + all_valid_moves.size() + " valid moves...");
+            double scores[] = new double[moves.size()];
+            System.out.println("Evaluating " + moves.size() + " valid moves...");
 
             Move m = null; // output value
 
-
-            for (int i = 0; i < all_valid_moves.size(); ++i) {
-                m = all_valid_moves.get(i);
+            for (int i = 0; i < moves.size(); ++i) {
+                m = moves.get(i);
 
                 Shape s = your_cutters[m.shape].rotations()[m.rotation];
 
                 Set<Move> blockedEnemyMoves = new HashSet<>();
+                Set<Move> blockedMoves = new HashSet<>();
 
                 for (Point p : s) {
                     Point pp = new Point(p.i + m.point.i, p.j + m.point.j);
 
                     blockedEnemyMoves.addAll(enemy_move_lookup.get(pp));
+                    blockedMoves.addAll(move_lookup.get(pp));
                 }
 
                 scores[i] = -s.size();
 
+                if (blockedEnemyMoves.size() == 0) {
+                    scores[i] += 10e6;
+                }
+
                 for (Move em : blockedEnemyMoves) {
                     scores[i] -= oppo_cutters[em.shape].size();
                 }
+
+                for (Move mm : blockedMoves) {
+                    scores[i] += Math.sqrt(your_cutters[mm.shape].size());
+                }
             }
 
-            double minscore = Long.MAX_VALUE;
-            double maxscore = Long.MIN_VALUE;
+            double minscore = Double.MAX_VALUE;
+            double maxscore = Double.MIN_VALUE;
 
             m = null;
 
-            for (int i = 0; i < all_valid_moves.size(); ++i) {
+            for (int i = 0; i < moves.size(); ++i) {
                 if (scores[i] < minscore) {
                     minscore = scores[i];
-                    m = all_valid_moves.get(i);
+                    m = moves.get(i);
                 }
 
                 if (scores[i] > maxscore) {
