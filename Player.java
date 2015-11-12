@@ -167,6 +167,24 @@ public class Player implements cc2.sim.Player {
             }
         } else {
 
+            Map<Point, Set<Move>> enemy_move_lookup = new HashMap<>();
+
+            for (int i = 0; i < dough.side(); ++i) {
+                for (int j = 0; j < dough.side(); ++j) {
+                    enemy_move_lookup.put(new Point(i, j), new HashSet<>());
+                }
+            }
+
+            List<Move> enemy_moves = Util.getValidMoves(dough, oppo_cutters, new int[]{0, 1, 2});
+
+            for (Move m : enemy_moves) {
+                Shape s = oppo_cutters[m.shape].rotations()[m.rotation];
+                for (Point p : s) {
+                    Point pp = new Point(p.i + m.point.i, p.j + m.point.j);
+                    enemy_move_lookup.get(pp).add(m);
+                }
+            }
+
             List<Move> undec_moves = Util.getValidMoves(dough, new Shape[]{your_cutters[0]}, new int[]{0});
             List<Move> oct_moves = Util.getValidMoves(dough, new Shape[]{your_cutters[1]}, new int[]{1});
             List<Move> pent_moves = Util.getValidMoves(dough, new Shape[]{your_cutters[2]}, new int[]{2});
@@ -178,39 +196,37 @@ public class Player implements cc2.sim.Player {
                 all_valid_moves.addAll(pent_moves);
             }
 
-            Map<MagicDough.Window, Long> pre_move_scores = md.scoreAllWindowsOppo();
-
             double scores[] = new double[all_valid_moves.size()];
-
             System.out.println("Evaluating " + all_valid_moves.size() + " valid moves...");
 
+            Move m = null; // output value
+
+
             for (int i = 0; i < all_valid_moves.size(); ++i) {
-                Move m = all_valid_moves.get(i);
-                Point dim = Util.dimensions(your_cutters[m.shape].rotations()[m.rotation])[0];
+                m = all_valid_moves.get(i);
 
-                MagicDough.Window w = md.effectWindow(m.point.i + dim.i / 2 - md.window_size / 2, m.point.j + dim.j / 2 - md.window_size / 2);
+                Shape s = your_cutters[m.shape].rotations()[m.rotation];
 
-                scores[i] = - pre_move_scores.get(w) - your_cutters[m.shape].size();
+                Set<Move> blockedEnemyMoves = new HashSet<>();
 
-                if (pre_move_scores.get(w) == 0) {
-                    continue;
+                for (Point p : s) {
+                    Point pp = new Point(p.i + m.point.i, p.j + m.point.j);
+
+                    blockedEnemyMoves.addAll(enemy_move_lookup.get(pp));
                 }
 
-                if (md.makeMove(m, your_cutters, false)) {
-                    long score = md.countSpacesOppo(w);
-                    md.undoLastMove(your_cutters);
-                    // score should be less than pre_move_scores so this is negative
-                    scores[i] += score;
-                } else {
-                    // can't make this move
-                    scores[i] += Integer.MAX_VALUE;
+                scores[i] = -s.size();
+
+                for (Move em : blockedEnemyMoves) {
+                    scores[i] -= oppo_cutters[em.shape].size();
                 }
             }
-            // most negative is best
 
             double minscore = Long.MAX_VALUE;
             double maxscore = Long.MIN_VALUE;
-            Move m = null;
+
+            m = null;
+
             for (int i = 0; i < all_valid_moves.size(); ++i) {
                 if (scores[i] < minscore) {
                     minscore = scores[i];
