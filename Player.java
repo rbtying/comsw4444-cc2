@@ -24,9 +24,9 @@ public class Player implements cc2.sim.Player {
     private Set<Integer> attempted_pentominoes = new HashSet<>();
 
     // Number of valid moves left when we switch to look ahead strategy
-    private int LOOKAHEAD_INIT_THRESHOLD = 50;
-    private int DEPTH = 2;
-    private int[] score = new int[2];
+    private int LOOKAHEAD_INIT_THRESHOLD = 200;
+    private int DEPTH = 3;
+    private static int[] score = new int[2];
 
     private MagicDough md = new MagicDough(50, 21);
 
@@ -197,8 +197,8 @@ public class Player implements cc2.sim.Player {
             int num_valid_moves_left = moves.size();
 
             if (num_valid_moves_left < LOOKAHEAD_INIT_THRESHOLD) {
-                m = lookahead(dough, your_cutters, oppo_cutters, move_lookup, enemy_move_lookup, moves, score, DEPTH, true)
-                        .move;
+                MoveAndScore mas = lookahead(dough, your_cutters, oppo_cutters, move_lookup, enemy_move_lookup, score, DEPTH, true);
+                m = mas.move;
             } else {
                 m = getBestMove(dough, your_cutters, oppo_cutters, move_lookup, enemy_move_lookup);
             }
@@ -214,8 +214,8 @@ public class Player implements cc2.sim.Player {
     }
 
     private class MoveAndScore {
-        public final Move move;
-        public final int score;
+        public Move move;
+        public int score;
 
         public MoveAndScore(Move move, int score) {
             this.move = move;
@@ -224,13 +224,13 @@ public class Player implements cc2.sim.Player {
     }
 
     private MoveAndScore lookahead(Dough dough, Shape[] your_cutters, Shape[] oppo_cutters, Map<Point,
-            Set<Move>> move_lookup, Map<Point, Set<Move>> enemy_move_lookup, List<Move> moves, int[] board_score,
+            Set<Move>> move_lookup, Map<Point, Set<Move>> enemy_move_lookup, int[] board_score,
                                    int depth, boolean is_not_opponent) {
 
-        System.out.println("Called lookahead");
+        System.out.println("Called lookahead at depth " + depth);
 
         if (depth == 0) {
-            Move m = null;
+            Move m;
 
             if (is_not_opponent) {
                 m = getBestMove(dough, your_cutters, oppo_cutters, move_lookup, enemy_move_lookup);
@@ -238,45 +238,48 @@ public class Player implements cc2.sim.Player {
                 m = getBestMove(dough, oppo_cutters, your_cutters, enemy_move_lookup, move_lookup);
             }
 
-            // Try the move
-            System.out.println(your_cutters[m.shape].toString());
-            Shape s = your_cutters[m.shape].rotations()[m.rotation];
-            dough.cut(s, m.point);
-
-            int score;
-            if (is_not_opponent) {
-                score = board_score[0] + s.size();
-            } else {
-                score = board_score[1] - s.size();
-            }
-
             if (m != null) {
+                Shape s = your_cutters[m.shape].rotations()[m.rotation];
+
+                int score;
+                if (is_not_opponent) {
+                    score = board_score[0] + s.size();
+                } else {
+                    score = board_score[1] - s.size();
+                }
                 return new MoveAndScore(m, score);
             } else {
-                return new MoveAndScore(null, Integer.MAX_VALUE);
+                return new MoveAndScore(null, Integer.MIN_VALUE);
             }
         }
 
+        List<Move> moves = Util.getValidMoves(dough, your_cutters, new int[]{0, 1, 2});
         MoveAndScore best_mas = new MoveAndScore(null, Integer.MIN_VALUE);
         for (Move m : moves) {
             // Try the move
             Shape s = your_cutters[m.shape].rotations()[m.rotation];
-            dough.cut(s, m.point);
-
-            // Get new valid moves for opponent
-            moves = Util.getValidMoves(dough, oppo_cutters, new int[]{0, 1, 2});
+            Dough dough_copy = new Dough(dough); // Note: Created copy constructor in Dough for this to work
+            dough_copy.cut(s, m.point);
 
             // Pick worst opponent move
-            MoveAndScore mas = lookahead(dough, oppo_cutters, your_cutters, enemy_move_lookup, move_lookup,
-                    moves, board_score, depth - 1, !is_not_opponent);
+            MoveAndScore mas = lookahead(dough_copy, oppo_cutters, your_cutters, enemy_move_lookup, move_lookup,
+                    board_score, depth-1, !is_not_opponent);
 
             // Update best choice
+            System.out.println("best mas score:" + best_mas.score);
+            System.out.println("mas score:" + mas.score);
             if (best_mas.score < mas.score) {
-                best_mas = mas;
+                best_mas.move = m;
+                best_mas.score = mas.score;
             }
         }
 
-        System.out.println("poop:" + best_mas.score);
+        if (best_mas.move == null) {
+            System.out.println("defaulting");
+            best_mas.move = getBestMove(dough, your_cutters, oppo_cutters, move_lookup, enemy_move_lookup);
+        }
+
+        System.out.println("returning score at depth" + depth + ":" + best_mas.score);
 
         return best_mas;
     }
