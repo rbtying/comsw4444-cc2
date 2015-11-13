@@ -23,7 +23,10 @@ public class Player implements cc2.sim.Player {
     private Set<Integer> attempted_octominoes = new HashSet<>();
     private Set<Integer> attempted_pentominoes = new HashSet<>();
 
-    private Random rng = new Random(0);
+    // Number of valid moves left when we switch to look ahead strategy
+    private int LOOKAHEAD_INIT_THRESHOLD = 50;
+    private int DEPTH = 2;
+    private int[] score = new int[2];
 
     private MagicDough md = new MagicDough(50, 21);
 
@@ -40,8 +43,8 @@ public class Player implements cc2.sim.Player {
 
         // Second attempt is a diagonal
         if (cutter_attempts[UNDECOMINO] == 1) {
-            for(int i = 0; i < 11; ++i) {
-                p[i] = new Point(6-i/2, (i/2+i%2));
+            for (int i = 0; i < 11; ++i) {
+                p[i] = new Point(6 - i / 2, (i / 2 + i % 2));
             }
             return new Shape(p);
         }
@@ -178,6 +181,7 @@ public class Player implements cc2.sim.Player {
             }
         } else {
 
+            // Each point on board maps to set of moves that add to score
             Map<Point, Set<Move>> enemy_move_lookup = new HashMap<>();
             Map<Point, Set<Move>> move_lookup = new HashMap<>();
 
@@ -188,83 +192,170 @@ public class Player implements cc2.sim.Player {
                 }
             }
 
-            List<Move> enemy_moves = Util.getValidMoves(dough, oppo_cutters, new int[]{0, 1, 2});
-
-            for (Move m : enemy_moves) {
-                Shape s = oppo_cutters[m.shape].rotations()[m.rotation];
-                for (Point p : s) {
-                    Point pp = new Point(p.i + m.point.i, p.j + m.point.j);
-                    enemy_move_lookup.get(pp).add(m);
-                }
-            }
-
+            Move m = null;
             List<Move> moves = Util.getValidMoves(dough, your_cutters, new int[]{0, 1, 2});
+            int num_valid_moves_left = moves.size();
 
-            for (Move m : moves) {
-                Shape s = your_cutters[m.shape].rotations()[m.rotation];
-                for (Point p : s) {
-                    Point pp = new Point(p.i + m.point.i, p.j + m.point.j);
-                    move_lookup.get(pp).add(m);
-                }
+            if (num_valid_moves_left < LOOKAHEAD_INIT_THRESHOLD) {
+                m = lookahead(dough, your_cutters, oppo_cutters, move_lookup, enemy_move_lookup, moves, score, DEPTH, true)
+                        .move;
+            } else {
+                m = getBestMove(dough, your_cutters, oppo_cutters, move_lookup, enemy_move_lookup);
             }
-
-            double scores[] = new double[moves.size()];
-            System.out.println("Evaluating " + moves.size() + " valid moves...");
-
-            Move m = null; // output value
-
-            for (int i = 0; i < moves.size(); ++i) {
-                m = moves.get(i);
-
-                Shape s = your_cutters[m.shape].rotations()[m.rotation];
-
-                Set<Move> blockedEnemyMoves = new HashSet<>();
-                Set<Move> blockedMoves = new HashSet<>();
-
-                for (Point p : s) {
-                    Point pp = new Point(p.i + m.point.i, p.j + m.point.j);
-
-                    blockedEnemyMoves.addAll(enemy_move_lookup.get(pp));
-                    blockedMoves.addAll(move_lookup.get(pp));
-                }
-
-                scores[i] = -s.size();
-
-                if (blockedEnemyMoves.size() == 0) {
-                    scores[i] += 10e6;
-                }
-
-                for (Move em : blockedEnemyMoves) {
-                    scores[i] -= oppo_cutters[em.shape].size();
-                }
-
-                for (Move mm : blockedMoves) {
-                    scores[i] += Math.sqrt(your_cutters[mm.shape].size());
-                }
-            }
-
-            double minscore = Double.MAX_VALUE;
-            double maxscore = Double.MIN_VALUE;
-
-            m = null;
-
-            for (int i = 0; i < moves.size(); ++i) {
-                if (scores[i] < minscore) {
-                    minscore = scores[i];
-                    m = moves.get(i);
-                }
-
-                if (scores[i] > maxscore) {
-                    maxscore = scores[i];
-                }
-            }
-
-            System.out.println("Picking move with score " + minscore);
 
             md.makeMove(m, your_cutters, false);
+
+            score[0] += your_cutters[m.shape].size();
+            score[1] = dough.countCut() - score[0];
 
             return m;
         }
         return null;
+    }
+
+    private class MoveAndScore {
+        public final Move move;
+        public final int score;
+
+        public MoveAndScore(Move move, int score) {
+            this.move = move;
+            this.score = score;
+        }
+    }
+
+    private MoveAndScore lookahead(Dough dough, Shape[] your_cutters, Shape[] oppo_cutters, Map<Point,
+            Set<Move>> move_lookup, Map<Point, Set<Move>> enemy_move_lookup, List<Move> moves, int[] board_score,
+                                   int depth, boolean is_not_opponent) {
+
+        System.out.println("Called lookahead");
+
+        if (depth == 0) {
+            Move m = null;
+
+            if (is_not_opponent) {
+                m = getBestMove(dough, your_cutters, oppo_cutters, move_lookup, enemy_move_lookup);
+            } else {
+                m = getBestMove(dough, oppo_cutters, your_cutters, enemy_move_lookup, move_lookup);
+            }
+
+            // Try the move
+            System.out.println(your_cutters[m.shape].toString());
+            Shape s = your_cutters[m.shape].rotations()[m.rotation];
+            dough.cut(s, m.point);
+
+            int score;
+            if (is_not_opponent) {
+                score = board_score[0] + s.size();
+            } else {
+                score = board_score[1] - s.size();
+            }
+
+            if (m != null) {
+                return new MoveAndScore(m, score);
+            } else {
+                return new MoveAndScore(null, Integer.MAX_VALUE);
+            }
+        }
+
+        MoveAndScore best_mas = new MoveAndScore(null, Integer.MIN_VALUE);
+        for (Move m : moves) {
+            // Try the move
+            Shape s = your_cutters[m.shape].rotations()[m.rotation];
+            dough.cut(s, m.point);
+
+            // Get new valid moves for opponent
+            moves = Util.getValidMoves(dough, oppo_cutters, new int[]{0, 1, 2});
+
+            // Pick worst opponent move
+            MoveAndScore mas = lookahead(dough, oppo_cutters, your_cutters, enemy_move_lookup, move_lookup,
+                    moves, board_score, depth - 1, !is_not_opponent);
+
+            // Update best choice
+            if (best_mas.score < mas.score) {
+                best_mas = mas;
+            }
+        }
+
+        System.out.println("poop:" + best_mas.score);
+
+        return best_mas;
+    }
+
+    private Move getBestMove(Dough dough, Shape[] your_cutters, Shape[] oppo_cutters, Map<Point, Set<Move>> move_lookup,
+                             Map<Point, Set<Move>> enemy_move_lookup) {
+        List<Move> moves = Util.getValidMoves(dough, your_cutters, new int[]{0, 1, 2});
+
+        for (Move m : moves) {
+            Shape s = your_cutters[m.shape].rotations()[m.rotation];
+            for (Point p : s) {
+                Point pp = new Point(p.i + m.point.i, p.j + m.point.j);
+                move_lookup.get(pp).add(m);
+            }
+        }
+
+        List<Move> enemy_moves = Util.getValidMoves(dough, oppo_cutters, new int[]{0, 1, 2});
+
+        for (Move m : enemy_moves) {
+            Shape s = oppo_cutters[m.shape].rotations()[m.rotation];
+            for (Point p : s) {
+                Point pp = new Point(p.i + m.point.i, p.j + m.point.j);
+                enemy_move_lookup.get(pp).add(m);
+            }
+        }
+
+        double scores[] = new double[moves.size()];
+        System.out.println("Evaluating " + moves.size() + " valid moves...");
+
+        Move m = null; // output value
+
+        for (int i = 0; i < moves.size(); ++i) {
+            m = moves.get(i);
+
+            Shape s = your_cutters[m.shape].rotations()[m.rotation];
+
+            Set<Move> blockedEnemyMoves = new HashSet<>();
+            Set<Move> blockedMoves = new HashSet<>();
+
+            for (Point p : s) {
+                Point pp = new Point(p.i + m.point.i, p.j + m.point.j);
+
+                blockedEnemyMoves.addAll(enemy_move_lookup.get(pp));
+                blockedMoves.addAll(move_lookup.get(pp));
+            }
+
+            scores[i] = -s.size();
+
+            if (blockedEnemyMoves.size() == 0) {
+                scores[i] += 10e6;
+            }
+
+            for (Move em : blockedEnemyMoves) {
+                scores[i] -= oppo_cutters[em.shape].size();
+            }
+
+            for (Move mm : blockedMoves) {
+                scores[i] += Math.sqrt(your_cutters[mm.shape].size());
+            }
+        }
+
+        double minscore = Double.MAX_VALUE;
+        double maxscore = Double.MIN_VALUE;
+
+        m = null;
+
+        for (int i = 0; i < moves.size(); ++i) {
+            if (scores[i] < minscore) {
+                minscore = scores[i];
+                m = moves.get(i);
+            }
+
+            if (scores[i] > maxscore) {
+                maxscore = scores[i];
+            }
+        }
+
+        System.out.println("Picking move with score " + minscore);
+
+        return m;
     }
 }
